@@ -12,7 +12,7 @@ use std::pin::Pin;
 use tokio::sync::broadcast::Receiver;
 use tokio_stream::wrappers::{BroadcastStream, errors::BroadcastStreamRecvError};
 
-pub const NOTIFICATIONS_CHANNEL_CAPACITY: usize = 8192;
+pub const NOTIFICATIONS_CHANNEL_CAPACITY: usize = 4096;
 
 pub fn notifications_stream_from_broadcast_receiver(
     receiver: Receiver<ValueNotification>,
