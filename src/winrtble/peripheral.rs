@@ -23,7 +23,10 @@ use crate::{
         Service, ValueNotification, WriteType,
         bleuuid::{uuid_from_u16, uuid_from_u32},
     },
-    common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
+    common::{
+        adapter_manager::AdapterManager,
+        util::{NOTIFICATIONS_CHANNEL_CAPACITY, notifications_stream_from_broadcast_receiver},
+    },
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
@@ -92,7 +95,7 @@ struct Shared {
 
 impl Peripheral {
     pub(crate) fn new(adapter: Weak<AdapterManager<Self>>, address: BDAddr) -> Self {
-        let (broadcast_sender, _) = broadcast::channel(16);
+        let (broadcast_sender, _) = broadcast::channel(NOTIFICATIONS_CHANNEL_CAPACITY);
         Peripheral {
             shared: Arc::new(Shared {
                 adapter,
