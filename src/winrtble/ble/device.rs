@@ -116,7 +116,15 @@ impl BLEDevice {
             return Ok(());
         }
 
-        let service_result = self.get_gatt_services(BluetoothCacheMode::Uncached).await?;
+        // Use `Cached` (not `Uncached`) for the connect-side service query.
+        // `Uncached` forces a full ATT service-discovery round trip and, on
+        // some Windows/driver combinations, gates that round trip on
+        // pairing/encryption — which never completes for unbonded BLE
+        // peripherals, causing `connect()` to hang past the caller's
+        // timeout. `Cached` lets WinRT establish the GATT session without
+        // that strict path; the subsequent `discover_services()` call
+        // (which already uses `Cached`) repopulates anything needed.
+        let service_result = self.get_gatt_services(BluetoothCacheMode::Cached).await?;
         let status = service_result.Status().map_err(|_| Error::DeviceNotFound)?;
         utils::to_error(status)
     }
