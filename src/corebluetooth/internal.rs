@@ -989,26 +989,24 @@ impl CoreBluetoothInternal {
                     trace!("Writing value! With kind {:?}", kind);
                     match kind {
                         WriteType::WithoutResponse => {
-                            if unsafe { peripheral.peripheral.canSendWriteWithoutResponse() } {
-                                unsafe {
-                                    peripheral.peripheral.writeValue_forCharacteristic_type(
-                                        &NSData::from_vec(data),
-                                        &characteristic.characteristic,
-                                        CBCharacteristicWriteType::CBCharacteristicWriteWithoutResponse,
-                                    );
-                                }
-                                fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
-                            } else {
-                                trace!("Queueing write-without-response (peripheral not ready)");
-                                peripheral.write_without_response_queue.push_back(
-                                    PendingWriteWithoutResponse {
-                                        service_uuid,
-                                        characteristic_uuid,
-                                        data,
-                                        fut,
-                                    },
-                                );
-                            }
+                            // Always enqueue and let the drain (after this block)
+                            // issue it. This makes the queue level-triggered: it
+                            // is drained on every write, not only on the
+                            // edge-triggered peripheralIsReadyToSendWriteWithoutResponse
+                            // delegate. A lost readiness edge then self-heals on
+                            // the next write (at most one frame delayed) instead
+                            // of wedging the future forever, and FIFO order is
+                            // preserved vs. writing a new frame ahead of queued
+                            // ones. (APP-7086)
+                            trace!("Queueing write-without-response (drained below)");
+                            peripheral.write_without_response_queue.push_back(
+                                PendingWriteWithoutResponse {
+                                    service_uuid,
+                                    characteristic_uuid,
+                                    data,
+                                    fut,
+                                },
+                            );
                         }
                         WriteType::WithResponse => {
                             unsafe {
@@ -1023,6 +1021,14 @@ impl CoreBluetoothInternal {
                     }
                 }
             }
+        }
+
+        // Level-triggered drain: issue queued write-without-response frames on
+        // every write, not only when the readiness delegate fires — so a lost
+        // peripheralIsReadyToSendWriteWithoutResponse edge can't strand a queued
+        // frame (the race that wedged OTA on optimized/release builds). (APP-7086)
+        if matches!(kind, WriteType::WithoutResponse) {
+            self.drain_write_without_response_queue(peripheral_uuid);
         }
     }
 
